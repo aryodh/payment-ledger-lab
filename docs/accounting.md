@@ -31,6 +31,15 @@ Balances are reported on the account's normal side, so a negative balance means 
 
 Payment of 10000 with a fee of 300:
 
+```mermaid
+flowchart LR
+    C["Capture confirmed"] -- "debit 10000" --> PC["PROVIDER_CLEARING<br/>asset"]
+    C -- "credit 9700" --> MP["MERCHANT_PAYABLE<br/>liability"]
+    C -- "credit 300" --> FR["PLATFORM_FEE_REVENUE<br/>revenue"]
+    R["Refund of 2000 confirmed"] -- "debit 2000" --> MP
+    R -- "credit 2000" --> PC
+```
+
 | Business event | Debit | Credit |
 | --- | --- | --- |
 | Capture confirmed | `PROVIDER_CLEARING` 10000 | `MERCHANT_PAYABLE` 9700, `PLATFORM_FEE_REVENUE` 300 |
@@ -47,6 +56,26 @@ Balances after each step of a full refund of that payment:
 | Refund of remaining 8000 | 0 | -300 | 300 |
 
 The final -300 is a merchant deficit. Fees are not refunded, and the system does not hold the merchant to a nonnegative balance. See [ADR 0002](adr/0002-fees-not-refunded-no-payouts.md).
+
+## Provider operation states
+
+```mermaid
+stateDiagram-v2
+    [*] --> QUEUED
+    QUEUED --> IN_FLIGHT: worker claims
+    IN_FLIGHT --> CONFIRMED: definitive response or callback
+    IN_FLIGHT --> DECLINED: definitive response or callback
+    IN_FLIGHT --> UNKNOWN: timeout, connection failure, or expired lease
+    UNKNOWN --> CONFIRMED: lookup or callback
+    UNKNOWN --> DECLINED: lookup or callback
+    UNKNOWN --> NEEDS_REVIEW: unresolved after 24 hours
+    NEEDS_REVIEW --> CONFIRMED: hourly lookup or late callback
+    NEEDS_REVIEW --> DECLINED: hourly lookup or late callback
+    CONFIRMED --> [*]
+    DECLINED --> [*]
+```
+
+`CONFIRMED` posts the journal. `DECLINED` fails the payment or refund and releases any refund reservation. `UNKNOWN` and `NEEDS_REVIEW` change no money and keep the reservation.
 
 ## Invariants
 
@@ -91,6 +120,20 @@ Each guarantee holds only once a test proves it. The README will link those test
 ## Corrections
 
 A correction needs an open finding or recorded discrepancy as evidence. It posts one balanced journal, and rerunning it changes nothing.
+
+```mermaid
+flowchart TD
+    SR["Settlement report"] --> Run["Reconciliation run"]
+    Books["Books at a fixed point in time"] --> Run
+    Run --> F["Findings"]
+    CB["Contradictory provider callback"] --> D["Discrepancy"]
+    F --> O["Operator reviews"]
+    D --> O
+    O -- "resolve" --> T["Triage status changes<br/>books unchanged"]
+    O -- "proven discrepancy" --> C["Correction command<br/>actor, reason, evidence"]
+    C -- "breaks a rule" --> X["Refused<br/>evidence stays open"]
+    C -- "allowed" --> J["One balanced journal<br/>and state change"]
+```
 
 | Discrepancy | Journal | State change |
 | --- | --- | --- |
