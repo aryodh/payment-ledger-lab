@@ -9,3 +9,21 @@ This is a reference implementation using synthetic data and a mock provider. It 
 - [Accounting scope and invariants](docs/accounting.md)
 - [Glossary](GLOSSARY.md)
 - [Decisions](docs/adr/)
+- [Dependencies](docs/dependencies.md)
+
+## Development
+
+Needs JDK 25 and Docker.
+
+```bash
+./mvnw verify
+```
+
+To run the database locally:
+
+```bash
+cp .env.example .env
+docker compose up migrate
+```
+
+If port 5432 is taken, set `LEDGER_DB_PORT` in `.env`.
