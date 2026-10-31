@@ -69,7 +69,7 @@ stateDiagram-v2
     UNKNOWN --> CONFIRMED: lookup or callback
     UNKNOWN --> DECLINED: lookup or callback
     UNKNOWN --> NEEDS_REVIEW: unresolved after 24 hours
-    NEEDS_REVIEW --> CONFIRMED: hourly lookup or late callback
+    NEEDS_REVIEW --> CONFIRMED: hourly lookup, late callback, or correction
     NEEDS_REVIEW --> DECLINED: hourly lookup or late callback
     CONFIRMED --> [*]
     DECLINED --> [*]
@@ -141,10 +141,14 @@ flowchart TD
 | Refund failed internally, provider refunded | Refund postings | Refund `FAILED` to `SUCCEEDED` |
 | Capture succeeded internally, provider has no such movement | Reversal of the capture journal | Payment `SUCCEEDED` to `FAILED` |
 | Refund succeeded internally, provider has no such movement | Reversal of the refund journal | Refund `SUCCEEDED` to `FAILED` |
+| Operation in `NEEDS_REVIEW`, settlement report shows the movement | Capture or refund postings | Operation to `CONFIRMED`; payment or refund `PENDING` to `SUCCEEDED` |
 
-The command refuses, and leaves the evidence open, in two cases:
+The command refuses, and leaves the evidence open, in three cases:
 
 - Correcting a failed refund would break invariant 6.
 - Reversing a capture while the payment has a reserved or successful refund. Resolve those refunds first.
+- Correcting a pending operation that isn't in `NEEDS_REVIEW`, or whose settlement row differs in amount or currency.
+
+No correction moves an operation to `DECLINED`. A row missing from a settlement report doesn't prove the provider declined, so only a lookup or callback can do that. Until then the operation stays in `NEEDS_REVIEW` and any refund reservation stays held.
 
 A reversal swaps the debits and credits of the original journal, which stays unchanged. See [ADR 0005](adr/0005-reconciliation-reports-corrections-post.md).
