@@ -15,6 +15,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -227,7 +228,11 @@ class PostJournalIT extends LedgerDatabaseTestBase {
 					throw new IllegalStateException(ex);
 				}
 			}));
-			firstPosted.await();
+			while (!firstPosted.await(100, TimeUnit.MILLISECONDS)) {
+				if (first.isDone()) {
+					first.get();
+				}
+			}
 
 			Future<UUID> second = executor.submit(() -> post(secondEvent, "CAPTURE", "payment-1", CAPTURE));
 
@@ -271,10 +276,14 @@ class PostJournalIT extends LedgerDatabaseTestBase {
 						}
 					}))))
 				.toList();
-			for (Future<?> posting : postings) {
-				posting.get();
+			try {
+				for (Future<?> posting : postings) {
+					posting.get();
+				}
 			}
-			running.set(false);
+			finally {
+				running.set(false);
+			}
 			sampler.get();
 		}
 
