@@ -227,9 +227,33 @@ class PaymentAcceptanceIT extends LedgerDatabaseTestBase {
 		assertThat(post(key, body(newReference(), 10000)).statusCode()).isEqualTo(202);
 	}
 
+	@ParameterizedTest
+	@ValueSource(strings = { "nul\\u0000", "tab\\t", "newline\\n" })
+	void merchantReferenceWithAControlCharacterIsRejected(String reference) throws Exception {
+		assertProblem(post(newKey(), body(reference, 100)), 422, "INVALID_MERCHANT_REFERENCE");
+	}
+
 	@Test
 	void merchantReferenceLongerThan200CharactersIsRejected() throws Exception {
 		assertProblem(post(newKey(), body("x".repeat(201), 100)), 422, "INVALID_MERCHANT_REFERENCE");
+	}
+
+	@Test
+	void unsupportedContentTypeIsAProblem() throws Exception {
+		HttpResponse<String> response = send(HttpRequest.newBuilder(uri("/v1/payments"))
+			.header("Content-Type", "text/plain")
+			.header("Idempotency-Key", newKey())
+			.POST(HttpRequest.BodyPublishers.ofString(body(newReference(), 100))));
+
+		assertProblem(response, 415, "UNSUPPORTED_MEDIA_TYPE");
+	}
+
+	@Test
+	void unsupportedMethodIsAProblem() throws Exception {
+		HttpResponse<String> response = send(HttpRequest.newBuilder(uri("/v1/payments")).GET());
+
+		assertProblem(response, 405, "METHOD_NOT_ALLOWED");
+		assertThat(response.headers().firstValue("Allow")).hasValue("POST");
 	}
 
 	@ParameterizedTest
@@ -253,15 +277,21 @@ class PaymentAcceptanceIT extends LedgerDatabaseTestBase {
 	}
 
 	private HttpResponse<String> post(String key, String body) throws Exception {
-		HttpRequest.Builder request = HttpRequest
-			.newBuilder(URI.create("http://127.0.0.1:" + this.port + "/v1/payments"))
+		HttpRequest.Builder request = HttpRequest.newBuilder(uri("/v1/payments"))
 			.header("Content-Type", "application/json")
-			.timeout(Duration.ofSeconds(10))
 			.POST(HttpRequest.BodyPublishers.ofString(body));
 		if (key != null) {
 			request.header("Idempotency-Key", key);
 		}
-		return HTTP.send(request.build(), HttpResponse.BodyHandlers.ofString());
+		return send(request);
+	}
+
+	private HttpResponse<String> send(HttpRequest.Builder request) throws Exception {
+		return HTTP.send(request.timeout(Duration.ofSeconds(10)).build(), HttpResponse.BodyHandlers.ofString());
+	}
+
+	private URI uri(String path) {
+		return URI.create("http://127.0.0.1:" + this.port + path);
 	}
 
 	private void assertProblem(HttpResponse<String> response, int status, String code) {

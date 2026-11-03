@@ -5,9 +5,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
 import java.util.HexFormat;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import io.github.aryodh.ledger.api.ApiException;
@@ -31,6 +29,7 @@ public class PaymentAcceptance {
 
 	static final String SCOPE = "POST /v1/payments";
 
+	// Spring leaves PostgreSQL's lock_not_available uncategorized, so it is matched by SQLState.
 	private static final String LOCK_NOT_AVAILABLE = "55P03";
 
 	private static final String RETRY_AFTER_SECONDS = "1";
@@ -45,9 +44,6 @@ public class PaymentAcceptance {
 
 	PaymentAcceptance(JdbcClient jdbc, TransactionTemplate transaction, JsonMapper json,
 			@Value("${ledger.platform-fee-bps}") long feeBasisPoints) {
-		if (feeBasisPoints < 0 || feeBasisPoints > 10000) {
-			throw new IllegalStateException("ledger.platform-fee-bps must be between 0 and 10000");
-		}
 		this.jdbc = jdbc;
 		this.transaction = transaction;
 		this.json = json;
@@ -58,11 +54,8 @@ public class PaymentAcceptance {
 			String requestId) {
 		String requestHash = sha256(this.json.writeValueAsString(List.of(SCOPE, merchantReference, amountMinor, currency)));
 		UUID paymentId = UUID.randomUUID();
-		Map<String, Object> body = new LinkedHashMap<>();
-		body.put("payment_id", paymentId);
-		body.put("status", "PENDING");
-		body.put("status_url", "/v1/payments/" + paymentId);
-		var accepted = new Response(HttpStatus.ACCEPTED.value(), this.json.writeValueAsString(body));
+		var accepted = new Response(HttpStatus.ACCEPTED.value(),
+				this.json.writeValueAsString(new Accepted(paymentId, "PENDING", "/v1/payments/" + paymentId)));
 		try {
 			return this.transaction.execute(status -> {
 				// A request with the same key waits on the unique index for this one to commit or roll back.
@@ -81,13 +74,13 @@ public class PaymentAcceptance {
 			});
 		}
 		catch (DataAccessException ex) {
-			if (LOCK_NOT_AVAILABLE.equals(sqlState(ex))) {
-				var headers = new HttpHeaders();
-				headers.set(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS);
-				throw new ApiException(HttpStatus.CONFLICT, "REQUEST_IN_PROGRESS",
-						"A request with this Idempotency-Key is still being processed", headers);
+			if (!(ex.getMostSpecificCause() instanceof SQLException sql && LOCK_NOT_AVAILABLE.equals(sql.getSQLState()))) {
+				throw ex;
 			}
-			throw ex;
+			var headers = new HttpHeaders();
+			headers.set(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS);
+			throw new ApiException(HttpStatus.CONFLICT, "REQUEST_IN_PROGRESS", "A conflicting request is still being processed",
+					headers);
 		}
 	}
 
@@ -127,15 +120,6 @@ public class PaymentAcceptance {
 				""").params("payment:" + paymentId, requestId).update();
 	}
 
-	private static String sqlState(Throwable ex) {
-		for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
-			if (cause instanceof SQLException sql) {
-				return sql.getSQLState();
-			}
-		}
-		return null;
-	}
-
 	private static String sha256(String value) {
 		try {
 			return HexFormat.of()
@@ -150,6 +134,9 @@ public class PaymentAcceptance {
 	 * The status and exact body to return, whether new or replayed.
 	 */
 	public record Response(int status, String body) {
+	}
+
+	record Accepted(UUID paymentId, String status, String statusUrl) {
 	}
 
 }

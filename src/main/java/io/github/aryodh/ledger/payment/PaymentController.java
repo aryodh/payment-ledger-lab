@@ -32,9 +32,10 @@ class PaymentController {
 			throw new ApiException(HttpStatus.BAD_REQUEST, "MALFORMED_REQUEST",
 					"merchant_reference, amount_minor, and currency are required");
 		}
-		if (body.merchantReference().isEmpty() || body.merchantReference().length() > 200) {
+		if (body.merchantReference().isEmpty() || body.merchantReference().length() > 200
+				|| body.merchantReference().chars().anyMatch(Character::isISOControl)) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_CONTENT, "INVALID_MERCHANT_REFERENCE",
-					"merchant_reference must be 1 to 200 characters");
+					"merchant_reference must be 1 to 200 characters with no control characters");
 		}
 		if (body.amountMinor() < 1 || body.amountMinor() > 100_000_000) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_CONTENT, "INVALID_AMOUNT",
