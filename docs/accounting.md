@@ -1,6 +1,6 @@
 # Accounting scope and invariants
 
-This is the contract the code must satisfy. Nothing here is implemented yet. Terms are defined in [GLOSSARY.md](../GLOSSARY.md).
+This is the contract the code must satisfy. So far only the posting function exists: it enforces invariants 1, 2, 4, and 5, and the at-most-once rule in invariant 3 ([tests](../src/test/java/io/github/aryodh/ledger/PostJournalIT.java)). Nothing calls it yet, and there is no API. Terms are defined in [GLOSSARY.md](../GLOSSARY.md).
 
 ## Scope
 
