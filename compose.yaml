@@ -20,7 +20,7 @@ services:
       retries: 30
 
   migrate:
-    image: flyway/flyway:12.4.0-alpine@sha256:b43c3d9b7227687682a9124451ac3dbc9b0003eca65290ad1dcda760345bc680
+    image: flyway/flyway:13.12.0-alpine@sha256:e1f8d0ad72b2ce71c8d5df521324cf626977aff7a04e313c989650f22c1575fc
     depends_on:
       postgres:
         condition: service_healthy
