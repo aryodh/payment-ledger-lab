@@ -1,5 +1,7 @@
 package io.github.aryodh.ledger.payment;
 
+import java.nio.charset.StandardCharsets;
+
 import io.github.aryodh.ledger.api.ApiException;
 import io.github.aryodh.ledger.api.RequestId;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,9 +35,10 @@ class PaymentController {
 					"merchant_reference, amount_minor, and currency are required");
 		}
 		if (body.merchantReference().isEmpty() || body.merchantReference().length() > 200
-				|| body.merchantReference().chars().anyMatch(Character::isISOControl)) {
+				|| body.merchantReference().chars().anyMatch(Character::isISOControl)
+				|| !isWellFormedUnicode(body.merchantReference())) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_CONTENT, "INVALID_MERCHANT_REFERENCE",
-					"merchant_reference must be 1 to 200 characters with no control characters");
+					"merchant_reference must be 1 to 200 characters of valid Unicode with no control characters");
 		}
 		if (body.amountMinor() < 1 || body.amountMinor() > 100_000_000) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_CONTENT, "INVALID_AMOUNT",
@@ -48,6 +51,12 @@ class PaymentController {
 		PaymentAcceptance.Response response = this.acceptance.accept(idempotencyKey, body.merchantReference(),
 				body.amountMinor(), body.currency(), RequestId.of(request));
 		return ResponseEntity.status(response.status()).contentType(MediaType.APPLICATION_JSON).body(response.body());
+	}
+
+	// A JSON escape can produce an unpaired surrogate, such as U+D800 on its own. It has no UTF-8 encoding, so it
+	// can't be stored or hashed as sent.
+	private static boolean isWellFormedUnicode(String value) {
+		return StandardCharsets.UTF_8.newEncoder().canEncode(value);
 	}
 
 	record CreatePaymentRequest(String merchantReference, Long amountMinor, String currency) {

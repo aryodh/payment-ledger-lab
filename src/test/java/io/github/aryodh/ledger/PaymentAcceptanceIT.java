@@ -233,6 +233,24 @@ class PaymentAcceptanceIT extends LedgerDatabaseTestBase {
 		assertProblem(post(newKey(), body(reference, 100)), 422, "INVALID_MERCHANT_REFERENCE");
 	}
 
+	@ParameterizedTest
+	@ValueSource(strings = { "high\\ud800", "low\\udc00", "\\ud800reversed\\udc00", "\\udc00\\ud800" })
+	void merchantReferenceWithAnUnpairedSurrogateIsRejected(String reference) throws Exception {
+		String key = newKey();
+
+		assertProblem(post(key, body(reference, 100)), 422, "INVALID_MERCHANT_REFERENCE");
+
+		assertThat(post(key, body(newReference(), 10000)).statusCode()).isEqualTo(202);
+	}
+
+	@Test
+	void merchantReferenceWithAPairedSurrogateIsAccepted() throws Exception {
+		String reference = newReference() + "-😀";
+
+		assertThat(post(newKey(), body(reference, 100)).statusCode()).isEqualTo(202);
+		assertThat(acceptedPayments(reference)).isOne();
+	}
+
 	@Test
 	void merchantReferenceLongerThan200CharactersIsRejected() throws Exception {
 		assertProblem(post(newKey(), body("x".repeat(201), 100)), 422, "INVALID_MERCHANT_REFERENCE");

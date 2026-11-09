@@ -5,7 +5,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
 import java.util.HexFormat;
-import java.util.List;
 import java.util.UUID;
 
 import io.github.aryodh.ledger.api.ApiException;
@@ -52,7 +51,7 @@ public class PaymentAcceptance {
 
 	public Response accept(String idempotencyKey, String merchantReference, long amountMinor, String currency,
 			String requestId) {
-		String requestHash = sha256(this.json.writeValueAsString(List.of(SCOPE, merchantReference, amountMinor, currency)));
+		String requestHash = requestHash(merchantReference, amountMinor, currency);
 		UUID paymentId = UUID.randomUUID();
 		var accepted = new Response(HttpStatus.ACCEPTED.value(),
 				this.json.writeValueAsString(new Accepted(paymentId, "PENDING", "/v1/payments/" + paymentId)));
@@ -118,6 +117,18 @@ public class PaymentAcceptance {
 				INSERT INTO audit_log (actor, action, resource, after_status, request_id)
 				VALUES ('unauthenticated', 'PAYMENT_ACCEPTED', ?, 'PENDING', ?)
 				""").params("payment:" + paymentId, requestId).update();
+	}
+
+	/**
+	 * Fingerprints the request fields that must match for a replay. Stored hashes are kept for the life of the
+	 * database, so this format is fixed here rather than taken from a serializer whose output can change with
+	 * configuration or upgrades. Changing it means a new version prefix, with old records still compared under v1.
+	 * Each string is length-prefixed so no two requests share a canonical form.
+	 */
+	static String requestHash(String merchantReference, long amountMinor, String currency) {
+		String canonical = "v1|" + SCOPE.length() + ":" + SCOPE + "|" + merchantReference.length() + ":"
+				+ merchantReference + "|" + amountMinor + "|" + currency.length() + ":" + currency;
+		return sha256(canonical);
 	}
 
 	private static String sha256(String value) {
