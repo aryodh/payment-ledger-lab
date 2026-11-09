@@ -24,6 +24,10 @@ _Avoid_: Admin, support
 A merchant's request to collect an amount, which ends as succeeded or failed.
 _Avoid_: Transaction, charge, order
 
+**Idempotency key**:
+A key the client chooses so that retries of one request return the original result instead of repeating it.
+_Avoid_: Request ID, nonce
+
 **Capture**:
 The provider's movement of a payment's money. There is no separate authorization step.
 _Avoid_: Charge, settlement
