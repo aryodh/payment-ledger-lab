@@ -27,3 +27,7 @@ docker compose up migrate
 ```
 
 If port 5432 is taken, set `LEDGER_DB_PORT` in `.env`.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
